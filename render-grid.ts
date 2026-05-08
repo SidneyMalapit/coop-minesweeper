@@ -195,6 +195,7 @@ process.stdout.write(cursorMove(Math.floor(g.columnCount / 2), Math.floor(g.rowC
 readline.emitKeypressEvents(process.stdin);
 process.stdin.setRawMode(true);
 
+// map from char sequence to game action
 const sequences = {
   'h': cursorMove(-1, 0),
   'j': cursorMove(0, 1),
@@ -258,6 +259,8 @@ const sequences = {
 
 const moveKeys = 'h j k l r'.split(' ');
 let queue = '';
+
+// keypress consumption
 process.stdin.on('keypress', async (str, key) => {
   if (key.ctrl && key.name === 'c') {
     process.stdout.write(cursorRestorePosition + cursorMove(0, totalHeight));
