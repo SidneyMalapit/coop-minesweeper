@@ -11,24 +11,6 @@ import {
 import chalk from 'chalk';
 import { Grid, Cell, CellType } from './Minesweeper.js';
 
-/* ex.
- * +            111
- *    0123456789012
- *  0 #############
- *  1 #############
- *  2 #############
- *  3 #############
- *  4 #############
- *  5 #############
- *  6 #############
- *  7 #############
- *  8 #############
- *  9 #############
- * 10 #############
- * 11 #############
- * 12 #############
- */
-
 const markerColors = [
   chalk.red,
   chalk.green,
@@ -92,7 +74,7 @@ export function writeControls() {
     + chalk.red('W') + slash + chalk.red('B') + chalk.white(':') + ' '
     + chalk.white('move to next/previous vertical unopened cell')
     + '\n\n'
-    + chalk.red('d') + chalk.white(':') + ' '
+    + chalk.red('space') + chalk.white(':') + ' '
     + chalk.white('open cell (chord on opened cells)')
     + '\n'
     + chalk.red('f') + chalk.white(':') + ' '
@@ -214,7 +196,7 @@ const sequences = {
     return '';
   },
 
-  'd': async (grid: Grid) => {
+  ' ': async (grid: Grid) => {
     const { rows: cursorRow, cols: cursorCol } = await getCursorPos();
     const gridRow = cursorRow - home.rows;
     const gridCol = cursorCol - home.cols;
