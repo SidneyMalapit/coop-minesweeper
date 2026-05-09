@@ -5,6 +5,7 @@ import {
   cursorGetPosition,
   cursorTo,
   cursorMove,
+  eraseLine,
   eraseDown,
   scrollUp
 } from 'ansi-escapes';
@@ -84,6 +85,26 @@ export function writeControls() {
     + chalk.white('rerender game (use if cursor wanders outside grid)');
 }
 
+export async function writeInfo(grid: Grid, gridCursor?: { rows: number, cols: number }) {
+  if (!gridCursor) { return ''; }
+
+  const { rows: r, cols: c } = gridCursor;
+
+  const cell = grid.get(r, c);
+  let item: string;
+  switch (cell.type) {
+    case CellType.Flag: item = chalk.bgYellowBright.black('flag'); break;
+    case CellType.Unopened: item = chalk.gray('hidden'); break;
+    case CellType.Mine: item = chalk.bgRed.black('mine'); break;
+    case CellType.Numeral: 
+      if (cell.count === 0) { item = chalk.gray('empty'); break; }
+      item = numericCellToChar(cell, false) + chalk.gray(` mine${cell.count === 1 ? '' : 's'} surrounding`);
+      break;
+  }
+
+  return eraseLine + chalk.gray(`(${c}, ${r}): ${item}`);
+}
+
 export async function writeAll(grid: Grid, columnMarkerHeight: number, rowMarkerWidth: number, scrollUpCount: number) {
 
   return ''
@@ -99,7 +120,9 @@ export async function writeAll(grid: Grid, columnMarkerHeight: number, rowMarker
     + cursorMove(rowMarkerWidth, columnMarkerHeight)
     + writeGrid(grid)
     + cursorRestorePosition
-    + cursorMove(0, columnMarkerHeight + grid.rowCount)
+    + cursorMove(0, columnMarkerHeight + grid.rowCount + 2)
+    + await writeInfo(grid)
+    + cursorMove(0, 1)
     + writeControls()
     + cursorRestorePosition
     + cursorMove(rowMarkerWidth, columnMarkerHeight);
@@ -116,8 +139,8 @@ function cellToChar(cell: Cell) {
   }
 }
 
-function numericCellToChar(cell: Cell) {
-  let color = chalk.bgBlack;
+function numericCellToChar(cell: Cell, useBg = true) {
+  let color = useBg ? chalk.bgBlack : chalk;
   switch (cell.count) {
     case 0: return color(' ');
     case 1: color = color.blueBright; break;
@@ -148,7 +171,11 @@ const getCursorPos = () => new Promise<{ rows: number, cols: number }>((resolve)
     const buf = process.stdin.read();
     const str = JSON.stringify(buf); // "\u001b[9;1R"
     const regex = /\[(.*)/g;
-    const xy = regex.exec(str)![0].replace(/\[|R"/g, '').split(';');
+    const regexMatch = regex.exec(str);
+    if (!regexMatch) {
+      throw new Error('Unable to parse cursor position response');
+    }
+    const xy = regexMatch[0].replace(/\[|R"/g, '').split(';');
     const pos = { rows: +xy[0]!, cols: +xy[1]! };
     process.stdin.setRawMode(isRaw);
     resolve(pos);
@@ -163,7 +190,7 @@ const g = new Grid(40, 18, 99);
 const columnMarkerHeight = Math.floor(Math.log10(g.columnCount)) + 1;
 const rowMarkerWidth = Math.floor(Math.log10(g.rowCount)) + 2;
 
-const totalHeight = g.rowCount + columnMarkerHeight + controlsHeight;
+const totalHeight = columnMarkerHeight + g.rowCount + 1 + 1 + 1 + controlsHeight;
 
 // only scroll if grid too big to fit in terminal
 const scrollUpCount = Math.max(0, (await getCursorPos()).rows - process.stdout.rows + totalHeight);
@@ -245,7 +272,7 @@ let queue = '';
 // keypress consumption
 process.stdin.on('keypress', async (str, key) => {
   if (key.ctrl && key.name === 'c') {
-    process.stdout.write(cursorRestorePosition + cursorMove(0, totalHeight));
+    process.stdout.write(cursorTo(0, home.rows + totalHeight - 3));
     return process.exit(); 
   }
 
@@ -263,18 +290,26 @@ process.stdin.on('keypress', async (str, key) => {
     else { process.stdout.write(await action(g)); }
 
     const { rows: cursorRow, cols: cursorCol } = await getCursorPos();
-    const gridRow = cursorRow - home.rows;
-    const gridCol = cursorCol - home.cols;
+    let gridRow = cursorRow - home.rows;
+    let gridCol = cursorCol - home.cols;
 
     // prevent cursor from moving outside of grid
     if (
       moveKeys.includes(actionKey) &&
       !g.withinBounds(gridRow, gridCol)
     ) {
-      const constrainedCol = constrain(gridCol, 0, g.columnCount - 1) - 1;
-      const constrainedRow = constrain(gridRow, 0, g.rowCount - 1) - 1;
-      process.stdout.write(cursorTo(home.cols + constrainedCol, home.rows + constrainedRow));
+      gridCol = constrain(gridCol, 0, g.columnCount - 1);
+      gridRow = constrain(gridRow, 0, g.rowCount - 1);
+      process.stdout.write(cursorTo(home.cols + gridCol - 1, home.rows + gridRow - 1));
     }
+
+    process.stdout.write(
+      cursorSavePosition +
+      cursorTo(home.cols - rowMarkerWidth - 1, home.rows - 1) +
+      cursorMove(0, totalHeight - controlsHeight - 2 - 2) +
+      await writeInfo(g, { cols: gridCol, rows: gridRow }) +
+      cursorRestorePosition
+    );
 
     break;
   }   
